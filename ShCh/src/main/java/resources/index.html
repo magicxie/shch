@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8"/>
+	<link href="css/bootstrap.min.css" rel="stylesheet">
+	<link href="css/bootstrap-theme.min.css" rel="stylesheet">
+	<link href="css/ds.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
+            <span class="sr-only"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="#">智昌模型</a>
+        </div>
+        <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+	      <ul class="nav navbar-nav">
+	        <li><a href="custom.html">自定义计算</a></li>
+	        </ul>
+	     </div>
+      </div>
+    </nav>
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-3 col-md-2 sidebar">
+          <ul class="nav nav-sidebar" id="menu"></ul>
+        </div>
+        <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
+          <h1 class="page-header" >往年<span id="section"></span>数据</h1>
+          <div class="table-responsive">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>年</th>
+                  <th>数值(可以调整)</th>
+                </tr>
+              </thead>
+              <tbody id="data">
+                <tr></tr>
+              </tbody>
+            </table>
+          </div>
+          <div>	
+          	<h1 class="page-header" >预测数据</h1>
+          	<form>
+          		<div>
+          			<label>我要预测未来<input id="next" value="1"/>年的数据</label>
+          		</div>
+          		<div>
+          			<a class="btn btn-primary" id="prediction-btn">开始预测<i class="glyphicon glyphicon-signal"></i></a>
+          		</div>
+          	</form>
+          	<div class="table-responsive">
+	            <table class="table table-striped">
+	              <thead>
+	                <tr>
+	                  <th>年</th>
+	                  <th>预测数值</th>
+	                </tr>
+	              </thead>
+	              <tbody id="predict-data">
+	                <tr></tr>
+	              </tbody>
+	            </table>
+	          </div>
+	          <div id="chart" style="width:100%;height: 400px;"></div>
+	       </div>
+        </div>
+      </div>
+    </div>
+    <script src="js/jquery-1.11.1.min.js"></script>
+	<script src="js/bootstrap.min.js"></script>
+  	<script src="js/data.js" charset="UTF-8"></script>
+  	<script src="js/echarts/echarts-plain-map.js"></script>
+	<script>
+	
+	function findByTitle(title, callback){
+		for(var m in data){
+			if(data[m].title == title){
+				callback(data[m]);
+				break;
+			}
+		}
+	}
+	function findData(callback){
+		findByTitle($('#section').text(), callback);
+	}
+	
+	function toChart(d0, years, title, lastYear){
+		var option = {
+			    title : {
+			        text: title,
+			    },
+			    tooltip : {
+			        trigger: 'axis'
+			    },
+			    legend: {
+			        data:['预测值']
+			    },
+			    calculable : true,
+			    xAxis : [
+			        {
+			            type : 'category',
+			            boundaryGap : false,
+			            data : years
+			        }
+			    ],
+			    yAxis : [
+			        {
+			            type : 'value'
+			        }
+			    ],
+			    series : [
+			        {
+			            name:'预测值',
+			            type:'bar',
+			            smooth:true,
+			            itemStyle: {normal: {areaStyle: {type: 'default'},label:{show:true}}},
+			            data:[]
+			        }
+			    ]
+			};
+		var myChart = window['c']
+		if(!myChart){
+			myChart = echarts.init(document.getElementById('chart'));
+			window['c'] = myChart;
+		}
+		option.series[0].data = d0;
+	    myChart.setOption(option, true);	                    
+	}
+	
+	$(function(){
+		
+		for(var m in data){
+			$('#menu').append('<li><a href="#" data-title="'+data[m].title+'">' +data[m].title+ '</a></li>')
+		}
+		$('#menu li:first').addClass('active');
+        
+		$('#menu li').bind('click',function(){
+			var li = $(this);
+			
+			$('#menu li.active').removeClass('active');
+			li.addClass('active');
+			var title = li.find('a').data('title');
+			$('#section').text(title);
+			$('#data').empty();
+			$('#predict-data').empty();
+			
+			findByTitle(title,function(data){
+				
+				var list = data.data;
+				
+				for(var i in list){
+					
+					var e = list[i];
+					
+					var i1 = '<input name="value" value="' +e.value+ '"/>'+data.unit;
+					
+					$('#data').append('<tr><td>'+e.year+'</td><td>'+i1+'</td></tr>');
+					
+				}
+			});
+			
+		}).filter(':first').click();
+		
+		$('#prediction-btn').click(function(){
+			
+			var param = {next : $('#next').val()};
+			var values = $('[name=value]');
+			var sample = [];
+			for(var i=0;i<values.length;i++){
+				sample.push(values[i].value);
+			}
+			param['sample'] = sample.join(',');
+				
+			$.get('predictBatch', param, 'json').success(function(resp){
+				
+				$('#predict-data').empty();
+				var maxYear = 0;
+				var unit = '';
+				var rawData;
+				findData(function(data){
+					rawData = data;
+					maxYear = Math.max.apply(Math, data.data.map(function(e){return e.year;}));
+					unit = data.unit;
+				});
+				var lastYear = maxYear;
+				var years = rawData.data.map(function(e){return e.year;});
+				
+				for(var m in resp){
+					
+					var e = Number.parseFloat(resp[m]).toFixed(2) + unit;
+				
+					$('#predict-data').append('<tr><td>'+(++maxYear)+'</td><td>'+e+'</td></tr>');
+					years.push(maxYear);
+				}
+				var d0 = rawData.data.map(function(e){return e.value;});
+				for(var r in resp){
+					d0.push(Number.parseFloat(resp[r]).toFixed(2));
+				}
+				toChart(d0, years, $('#section').text(),lastYear);
+						
+			});
+		});
+	});
+	</script>
+</body>
+</html>
